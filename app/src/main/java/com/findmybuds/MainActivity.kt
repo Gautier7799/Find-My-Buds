@@ -401,7 +401,13 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
         permissionRefresh++
         if (finder.hasLocationPermission()) finder.status = "تم منح إذن الموقع لحفظ آخر مكان رُصدت فيه السماعة"
     }
-    LaunchedEffect(Unit) {\n        finder.loadSavedLocation()\n        while (true) {\n            delay(1000L)\n            finder.pruneStaleDevices()\n        }\n    }
+    LaunchedEffect(Unit) {
+        finder.loadSavedLocation()
+        while (true) {
+            delay(1000L)
+            finder.pruneStaleDevices()
+        }
+    }
     val selected = finder.devices[finder.selectedAddress]
     val context = LocalContext.current
     val permissionRefreshVersion = permissionRefresh
