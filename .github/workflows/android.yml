@@ -36,7 +36,7 @@ jobs:
 
       - name: Name APK with version
         run: |
-          VERSION="0.2.${GITHUB_RUN_NUMBER}"
+          VERSION="0.3.${GITHUB_RUN_NUMBER}"
           cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/Find-My-Buds-v${VERSION}-build-${GITHUB_RUN_NUMBER}.apk"
 
       - name: Upload versioned debug APK
