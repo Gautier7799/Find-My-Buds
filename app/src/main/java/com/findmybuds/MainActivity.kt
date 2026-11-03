@@ -130,6 +130,8 @@ class BluetoothFinder(private val context: Context) {
             return
         }
         try {
+            try { callback?.let { scanner?.stopScan(it) } } catch (_: Exception) {}
+            callback = null
             scanner = bt.bluetoothLeScanner
             val activeScanner = scanner
             if (activeScanner == null) {
@@ -143,18 +145,22 @@ class BluetoothFinder(private val context: Context) {
                 }
                 override fun onScanFailed(errorCode: Int) {
                     scanning = false
-                    if (scanRetries < 2 && errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
+                    if (scanRetries < 4) {
                         scanRetries++
-                        status = "تعثر البحث؛ إعادة المحاولة ${scanRetries}/2"
-                        mainHandler.postDelayed({ if (!scanning) start() }, 1800L)
+                        try { callback?.let { scanner?.stopScan(it) } } catch (_: Exception) {}
+                        status = "تعثر المسح؛ إعادة المحاولة ${scanRetries}/4"
+                        mainHandler.postDelayed({ if (!scanning) start() }, 1400L)
                     } else {
-                        status = "فشل البحث (رمز $errorCode)"
+                        status = "توقف مسح Bluetooth (رمز $errorCode). اضغط لبدء البحث مجدداً"
                     }
                 }
             }
             callback = cb
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
                 .setReportDelay(0L)
                 .build()
             activeScanner.startScan(null, settings, cb)
@@ -177,10 +183,10 @@ class BluetoothFinder(private val context: Context) {
         val now = System.currentTimeMillis()
         val samples = rssiSamples.getOrPut(address) { ArrayDeque() }
         samples.addLast(result.rssi)
-        while (samples.size > 5) samples.removeFirst()
+        while (samples.size > 3) samples.removeFirst()
         val median = samples.toList().sorted()[samples.size / 2].toFloat()
         val previous = smoothedRssi[address]
-        val filtered = if (previous == null) median else (previous * 0.62f + median * 0.38f)
+        val filtered = if (previous == null) median else (previous * 0.35f + median * 0.65f)
         smoothedRssi[address] = filtered
         val stableRssi = filtered.toInt()
         devices[address] = Bud(address, name, stableRssi, now)
@@ -192,12 +198,15 @@ class BluetoothFinder(private val context: Context) {
     }
 
     fun pruneStaleDevices() {
-        val cutoff = System.currentTimeMillis() - 7500L
+        // Earbuds may advertise intermittently; do not drop them after a brief radio gap.
+        val cutoff = System.currentTimeMillis() - 30000L
         val stale = devices.values.filter { it.seenAt < cutoff }.map { it.address }
         stale.forEach { address ->
             devices.remove(address)
-            rssiSamples.remove(address)
-            smoothedRssi.remove(address)
+            if (selectedAddress != address) {
+                rssiSamples.remove(address)
+                smoothedRssi.remove(address)
+            }
         }
         if (selectedAddress != null && selectedAddress !in devices.keys) {
             lastAlertBand = -1
@@ -220,14 +229,14 @@ class BluetoothFinder(private val context: Context) {
     }
 
     fun alertPhone() {
-        playPhoneTone(85, 900)
+        playPhoneTone(100, 1200)
     }
 
     private fun maybeBeep(rssi: Int) {
         val band = when {
-            rssi >= -55 -> 3
-            rssi >= -67 -> 2
-            rssi >= -80 -> 1
+            rssi >= -60 -> 3
+            rssi >= -75 -> 2
+            rssi >= -90 -> 1
             else -> 0
         }
         if (band == 0) {
@@ -254,8 +263,9 @@ class BluetoothFinder(private val context: Context) {
 
     private fun playPhoneTone(volume: Int, durationMs: Int) {
         try {
-            val tone = ToneGenerator(AudioManager.STREAM_ALARM, volume)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs)
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
+            val started = tone.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs)
+            if (!started) status = "تعذر بدء النغمة؛ تحقق من مستوى صوت الوسائط"
             mainHandler.postDelayed(
                 { try { tone.release() } catch (_: Exception) {} },
                 durationMs + 120L
