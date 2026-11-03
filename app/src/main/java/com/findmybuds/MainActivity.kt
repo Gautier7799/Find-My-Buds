@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -214,15 +216,22 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
 
     LaunchedEffect(Unit) { finder.loadSavedLocation() }
     val selected = finder.devices[finder.selectedAddress]
-    val bg = Color(0xFF0B1011)
-    val panel = Color(0xFF171F20)
-    val mint = Color(0xFFB7F7D2)
-    val muted = Color(0xFF9AAEAA)
+    val context = LocalContext.current
+    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        dynamicDarkColorScheme(context)
+    } else {
+        darkColorScheme(
+            primary = Color(0xFFB7F7D2),
+            background = Color(0xFF0B1011),
+            surface = Color(0xFF171F20)
+        )
+    }
+    val bg = scheme.background
+    val panel = scheme.surface
+    val mint = scheme.primary
+    val muted = scheme.onSurfaceVariant
 
-    MaterialTheme(colorScheme = darkColorScheme(
-        background = bg, surface = panel, primary = mint, onPrimary = Color(0xFF092016),
-        onBackground = Color(0xFFEAF4F0), onSurface = Color(0xFFEAF4F0)
-    )) {
+    MaterialTheme(colorScheme = scheme) {
         Surface(Modifier.fillMaxSize(), color = bg) {
             Column(Modifier.fillMaxSize().padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
