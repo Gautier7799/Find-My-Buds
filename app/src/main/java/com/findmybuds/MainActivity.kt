@@ -228,10 +228,24 @@ class BluetoothFinder(private val context: Context) {
 
 @Composable
 fun FindMyBudsLogoMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 56.dp) {
-    Box(modifier.size(size).clip(CircleShape).background(Color(0xFF1A1A1A)), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(size * 0.70f).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(size * 0.35f).clip(CircleShape).background(Color(0xFF111111)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Bluetooth, contentDescription = "Find My Buds", tint = Color(0xFF0082FF), modifier = Modifier.size(size * 0.19f))
+    Box(
+        modifier = modifier.size(size).clip(CircleShape).background(Color(0xFF1A1A1A)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier.size(size * 0.78f).clip(CircleShape).background(Color.White),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.size(size * 0.48f).clip(CircleShape).background(Color(0xFF111111)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Bluetooth,
+                    contentDescription = "Find My Buds",
+                    tint = Color(0xFF0082FF),
+                    modifier = Modifier.size(size * 0.34f)
+                )
             }
         }
     }
