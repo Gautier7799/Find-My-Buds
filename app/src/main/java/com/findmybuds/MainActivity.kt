@@ -276,7 +276,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                             }
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text(selected?.let { "\${it.rssi} dBm" } ?: "بانتظار إشارة Bluetooth", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                        Text(selected?.let { "${it.rssi} dBm" } ?: "بانتظار إشارة Bluetooth", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
                         Text("مؤشر تقريبي يتأثر بالجدران والاتجاه", fontSize = 11.sp, color = muted)
                         Spacer(Modifier.height(20.dp))
                         Button(
@@ -300,7 +300,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("الأجهزة القريبة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = scheme.onBackground)
                     Spacer(Modifier.weight(1f))
-                    Text("\${finder.devices.size} مكتشف", color = muted, fontSize = 12.sp)
+                    Text("${finder.devices.size} مكتشف", color = muted, fontSize = 12.sp)
                 }
                 if (finder.devices.isEmpty()) {
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = scheme.surfaceVariant)) {
@@ -328,7 +328,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                                         Text(bud.name, fontWeight = FontWeight.Medium, color = scheme.onSurface)
                                         Text(bud.address, color = muted, fontSize = 10.sp)
                                     }
-                                    Text("\${bud.rssi} dBm", color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("${bud.rssi} dBm", color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
