@@ -3,10 +3,23 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#1A1A1A" android:pathData="M54,4a50,50 0,1 0,0 100a50,50 0,1 0,0 -100" />
-    <path android:fillColor="#FFFFFF" android:pathData="M54,18a36,36 0,1 0,0 72a36,36 0,1 0,0 -72" />
-    <path android:fillColor="#111111" android:pathData="M54,35a19,19 0,1 0,0 38a19,19 0,1 0,0 -38" />
-    <group android:translateX="22" android:translateY="20" android:scaleX="2.8" android:scaleY="2.8">
-        <path android:fillColor="#0082FF" android:pathData="M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71L13.41,12l4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zm1.88,10.46L13,18.17v-3.76l1.88,1.88z"/>
+    <!-- Full three-ring identity, kept inside the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#171717"
+        android:pathData="M54,20a34,34 0,1 0,0 68a34,34 0,1 0,0 -68" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28a26,26 0,1 0,0 52a26,26 0,1 0,0 -52" />
+    <path
+        android:fillColor="#111111"
+        android:pathData="M54,40a14,14 0,1 0,0 28a14,14 0,1 0,0 -28" />
+    <group
+        android:translateX="45.5"
+        android:translateY="45.5"
+        android:scaleX="0.75"
+        android:scaleY="0.75">
+        <path
+            android:fillColor="#0082FF"
+            android:pathData="M17.71,7.71L12,2h-1v7.59L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41V22h1l5.71,-5.71L13.41,12l4.3,-4.29zM13,5.83l1.88,1.88L13,9.59V5.83zm1.88,10.46L13,18.17v-3.76l1.88,1.88z" />
     </group>
 </vector>
