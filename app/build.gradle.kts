@@ -4,6 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val ciBuildNumber = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.findmybuds"
     compileSdk = 36
@@ -12,8 +14,8 @@ android {
         applicationId = "com.findmybuds"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = ciBuildNumber
+        versionName = "0.1.$ciBuildNumber"
     }
     buildFeatures { compose = true }
     compileOptions {
