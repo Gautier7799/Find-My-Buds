@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -63,6 +62,7 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 data class Bud(val address: String, val name: String, val rssi: Int, val seenAt: Long)
 
@@ -87,7 +87,13 @@ class BluetoothFinder(private val context: Context) {
     private var scanner: BluetoothLeScanner? = null
     private var callback: ScanCallback? = null
     private var lastBeepAt = 0L
-    private var lastCloseState = false
+    private var lastAlertBand = -1
+    private var scanRetries = 0
+    var scanResultCount by mutableIntStateOf(0)
+        private set
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val rssiSamples = mutableMapOf<String, ArrayDeque<Int>>()
+    private val smoothedRssi = mutableMapOf<String, Float>()
 
     val devices = mutableStateMapOf<String, Bud>()
     var scanning by mutableStateOf(false)
@@ -125,39 +131,93 @@ class BluetoothFinder(private val context: Context) {
             return
         }
         try {
+            try { callback?.let { scanner?.stopScan(it) } } catch (_: Exception) {}
+            callback = null
+            scanResultCount = 0
             scanner = bt.bluetoothLeScanner
-            if (scanner == null) {
+            val activeScanner = scanner
+            if (activeScanner == null) {
                 status = "ماسح Bluetooth LE غير متاح"
                 return
             }
             val cb = object : ScanCallback() {
-                override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    val device = result.device
-                    val address = device.address ?: return
-                    val name = try { device.name ?: result.scanRecord?.deviceName ?: "جهاز Bluetooth غير مسمى" }
-                               catch (_: SecurityException) { "سماعة Bluetooth" }
-                    devices[address] = Bud(address, name, result.rssi, System.currentTimeMillis())
-                    if (selectedAddress == address) {
-                        saveLastLocation()
-                        maybeBeep(result.rssi)
-                    }
+                override fun onScanResult(callbackType: Int, result: ScanResult) = handleResult(result)
+                override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                    results.forEach { handleResult(it) }
                 }
                 override fun onScanFailed(errorCode: Int) {
                     scanning = false
-                    status = "فشل البحث (رمز $errorCode)"
+                    status = "فشل مسح BLE: ${scanErrorText(errorCode)} (رمز $errorCode). اضغط لإعادة المحاولة"
                 }
             }
             callback = cb
-            val settings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .build()
-            scanner?.startScan(null, settings, cb)
+            // Start with Android's platform-default unfiltered BLE scan.
+            // Avoid optional controller matching modes while diagnosing discovery.
+            activeScanner.startScan(cb)
             scanning = true
-            status = "يتم البحث عن سماعات Bluetooth القريبة"
+            status = "بدأ مسح BLE؛ ننتظر إعلانات الأجهزة القريبة"
+            mainHandler.postDelayed({
+                if (scanning && scanResultCount == 0) {
+                    status = "المسح بدأ لكن لم تصل أي إعلانات BLE خلال 12 ثانية؛ نحتاج التحقق من بث الأجهزة وإذن المسح"
+                }
+            }, 12_000L)
         } catch (e: SecurityException) {
+            scanning = false
             status = "لم تُمنح صلاحية البحث عن الأجهزة القريبة"
         } catch (e: Exception) {
+            scanning = false
             status = "تعذر بدء البحث: ${e.message ?: "خطأ غير معروف"}"
+        }
+    }
+
+    private fun scanErrorText(code: Int): String = when (code) {
+        ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "المسح بدأ مسبقاً"
+        ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "فشل تسجيل التطبيق لدى Bluetooth"
+        ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "خطأ داخلي في Bluetooth"
+        ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "ميزة المسح غير مدعومة"
+        5 -> "موارد Bluetooth غير كافية"
+        6 -> "طلبات المسح متكررة بسرعة"
+        else -> "خطأ غير معروف"
+    }
+
+    private fun handleResult(result: ScanResult) {
+        scanResultCount++
+        status = "وصلت نتائج BLE: $scanResultCount"
+        val address = try { result.device.address } catch (_: SecurityException) { return }
+        if (address.isNullOrBlank()) return
+        val name = try { result.device.name ?: result.scanRecord?.deviceName ?: "جهاز Bluetooth غير مسمى" }
+                   catch (_: SecurityException) { "سماعة Bluetooth" }
+        val now = System.currentTimeMillis()
+        val samples = rssiSamples.getOrPut(address) { ArrayDeque() }
+        samples.addLast(result.rssi)
+        while (samples.size > 3) samples.removeFirst()
+        val median = samples.toList().sorted()[samples.size / 2].toFloat()
+        val previous = smoothedRssi[address]
+        val filtered = if (previous == null) median else (previous * 0.35f + median * 0.65f)
+        smoothedRssi[address] = filtered
+        val stableRssi = filtered.toInt()
+        devices[address] = Bud(address, name, stableRssi, now)
+        scanRetries = 0
+        if (selectedAddress == address) {
+            saveLastLocation()
+            maybeBeep(stableRssi)
+        }
+    }
+
+    fun pruneStaleDevices() {
+        // Earbuds may advertise intermittently; do not drop them after a brief radio gap.
+        val cutoff = System.currentTimeMillis() - 30000L
+        val stale = devices.values.filter { it.seenAt < cutoff }.map { it.address }
+        stale.forEach { address ->
+            devices.remove(address)
+            if (selectedAddress != address) {
+                rssiSamples.remove(address)
+                smoothedRssi.remove(address)
+            }
+        }
+        if (selectedAddress != null && selectedAddress !in devices.keys) {
+            lastAlertBand = -1
+            status = "انقطعت إشارة السماعة؛ نواصل البحث عنها"
         }
     }
 
@@ -170,29 +230,50 @@ class BluetoothFinder(private val context: Context) {
 
     fun select(address: String) {
         selectedAddress = address
+        lastAlertBand = -1
         status = "تم اختيار السماعة. اضغط ابدأ البحث لتتبع الإشارة"
         devices[address]?.let { saveLastLocation() }
     }
 
     fun alertPhone() {
-        playPhoneTone(85, 900)
+        playPhoneTone(100, 1200)
     }
 
     private fun maybeBeep(rssi: Int) {
-        val close = rssi >= -62
+        val band = when {
+            rssi >= -60 -> 3
+            rssi >= -75 -> 2
+            rssi >= -90 -> 1
+            else -> 0
+        }
+        if (band == 0) {
+            lastAlertBand = 0
+            return
+        }
         val now = SystemClock.elapsedRealtime()
-        if (close && (!lastCloseState || now - lastBeepAt > 3500)) {
-            playPhoneTone(75, 450)
+        val interval = when (band) {
+            3 -> 850L
+            2 -> 1350L
+            else -> 2100L
+        }
+        if (band != lastAlertBand || now - lastBeepAt >= interval) {
+            val volume = when (band) {
+                3 -> 82
+                2 -> 68
+                else -> 52
+            }
+            playPhoneTone(volume, if (band == 3) 300 else 220)
             lastBeepAt = now
         }
-        lastCloseState = close
+        lastAlertBand = band
     }
 
     private fun playPhoneTone(volume: Int, durationMs: Int) {
         try {
-            val tone = ToneGenerator(AudioManager.STREAM_ALARM, volume)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, volume.coerceIn(0, 100))
+            val started = tone.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs)
+            if (!started) status = "تعذر بدء النغمة؛ تحقق من مستوى صوت الوسائط"
+            mainHandler.postDelayed(
                 { try { tone.release() } catch (_: Exception) {} },
                 durationMs + 120L
             )
@@ -240,7 +321,6 @@ class BluetoothFinder(private val context: Context) {
 
     fun signalPercent(rssi: Int): Float = ((rssi + 100) / 60f).coerceIn(0f, 1f)
 }
-
 @Composable
 fun FindMyBudsLogoMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 56.dp) {
     Box(
@@ -338,7 +418,13 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
         permissionRefresh++
         if (finder.hasLocationPermission()) finder.status = "تم منح إذن الموقع لحفظ آخر مكان رُصدت فيه السماعة"
     }
-    LaunchedEffect(Unit) { finder.loadSavedLocation() }
+    LaunchedEffect(Unit) {
+        finder.loadSavedLocation()
+        while (true) {
+            delay(1000L)
+            finder.pruneStaleDevices()
+        }
+    }
     val selected = finder.devices[finder.selectedAddress]
     val context = LocalContext.current
     val permissionRefreshVersion = permissionRefresh
