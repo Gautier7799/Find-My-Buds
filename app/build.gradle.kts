@@ -15,7 +15,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = ciBuildNumber
-        versionName = "0.2.$ciBuildNumber"
+        versionName = "0.3.$ciBuildNumber"
     }
     buildFeatures {
         compose = true
