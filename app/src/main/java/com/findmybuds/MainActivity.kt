@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -90,6 +89,8 @@ class BluetoothFinder(private val context: Context) {
     private var lastBeepAt = 0L
     private var lastAlertBand = -1
     private var scanRetries = 0
+    var scanResultCount by mutableIntStateOf(0)
+        private set
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val rssiSamples = mutableMapOf<String, ArrayDeque<Int>>()
     private val smoothedRssi = mutableMapOf<String, Float>()
@@ -132,6 +133,7 @@ class BluetoothFinder(private val context: Context) {
         try {
             try { callback?.let { scanner?.stopScan(it) } } catch (_: Exception) {}
             callback = null
+            scanResultCount = 0
             scanner = bt.bluetoothLeScanner
             val activeScanner = scanner
             if (activeScanner == null) {
@@ -145,27 +147,20 @@ class BluetoothFinder(private val context: Context) {
                 }
                 override fun onScanFailed(errorCode: Int) {
                     scanning = false
-                    if (scanRetries < 4) {
-                        scanRetries++
-                        try { callback?.let { scanner?.stopScan(it) } } catch (_: Exception) {}
-                        status = "تعثر المسح؛ إعادة المحاولة ${scanRetries}/4"
-                        mainHandler.postDelayed({ if (!scanning) start() }, 1400L)
-                    } else {
-                        status = "توقف مسح Bluetooth (رمز $errorCode). اضغط لبدء البحث مجدداً"
-                    }
+                    status = "فشل مسح BLE: ${scanErrorText(errorCode)} (رمز $errorCode). اضغط لإعادة المحاولة"
                 }
             }
             callback = cb
-            val settings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-                .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
-                .setReportDelay(0L)
-                .build()
-            activeScanner.startScan(null, settings, cb)
+            // Start with Android's platform-default unfiltered BLE scan.
+            // Avoid optional controller matching modes while diagnosing discovery.
+            activeScanner.startScan(cb)
             scanning = true
-            status = "يتم البحث عن سماعات Bluetooth القريبة"
+            status = "بدأ مسح BLE؛ ننتظر إعلانات الأجهزة القريبة"
+            mainHandler.postDelayed({
+                if (scanning && scanResultCount == 0) {
+                    status = "المسح بدأ لكن لم تصل أي إعلانات BLE خلال 12 ثانية؛ نحتاج التحقق من بث الأجهزة وإذن المسح"
+                }
+            }, 12_000L)
         } catch (e: SecurityException) {
             scanning = false
             status = "لم تُمنح صلاحية البحث عن الأجهزة القريبة"
@@ -175,7 +170,19 @@ class BluetoothFinder(private val context: Context) {
         }
     }
 
+    private fun scanErrorText(code: Int): String = when (code) {
+        ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "المسح بدأ مسبقاً"
+        ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "فشل تسجيل التطبيق لدى Bluetooth"
+        ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "خطأ داخلي في Bluetooth"
+        ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "ميزة المسح غير مدعومة"
+        5 -> "موارد Bluetooth غير كافية"
+        6 -> "طلبات المسح متكررة بسرعة"
+        else -> "خطأ غير معروف"
+    }
+
     private fun handleResult(result: ScanResult) {
+        scanResultCount++
+        status = "وصلت نتائج BLE: $scanResultCount"
         val address = try { result.device.address } catch (_: SecurityException) { return }
         if (address.isNullOrBlank()) return
         val name = try { result.device.name ?: result.scanRecord?.deviceName ?: "جهاز Bluetooth غير مسمى" }
