@@ -8,6 +8,9 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings as AndroidSettings
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
@@ -87,17 +90,26 @@ class BluetoothFinder(private val context: Context) {
     var status by mutableStateOf("جاهز للبحث")
 
     fun hasPermissions(): Boolean {
-        val scan = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        val scan = if (Build.VERSION.SDK_INT >= 31) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        }
         val connect = Build.VERSION.SDK_INT < 31 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        val location = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        return scan && connect && location
+        return scan && connect
     }
+
+    fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    fun isBluetoothEnabled(): Boolean = try { adapter?.isEnabled == true } catch (_: SecurityException) { false }
 
     fun start() {
         if (!hasPermissions()) {
-            status = "امنح صلاحيات Bluetooth والموقع أولاً"
+            status = "امنح إذن الأجهزة القريبة لبدء البحث"
             return
         }
         val bt = adapter
@@ -228,14 +240,19 @@ fun FindMyBudsLogoMark(modifier: Modifier = Modifier, size: androidx.compose.ui.
 
 @Composable
 fun FindMyBudsScreen(finder: BluetoothFinder) {
-    val permissions = buildList {
-        add(Manifest.permission.BLUETOOTH_SCAN)
-        if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
-        add(Manifest.permission.ACCESS_FINE_LOCATION)
-        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    val bluetoothPermissions = if (Build.VERSION.SDK_INT >= 31) {
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if (result.values.any { it } && finder.hasPermissions()) finder.start()
+    var permissionRefresh by remember { mutableIntStateOf(0) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionRefresh++
+        if (finder.hasPermissions()) finder.start()
+    }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionRefresh++
+        if (finder.hasLocationPermission()) finder.status = "تم منح إذن الموقع لحفظ آخر مكان رُصدت فيه السماعة"
     }
     LaunchedEffect(Unit) { finder.loadSavedLocation() }
     val selected = finder.devices[finder.selectedAddress]
@@ -256,7 +273,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                 NavigationBar(containerColor = scheme.surface, tonalElevation = 2.dp) {
                     NavigationBarItem(!showHistory && !showSettings, { showHistory = false; showSettings = false }, icon = { Icon(Icons.Default.Search, null) }, label = { Text("البحث") })
                     NavigationBarItem(showHistory, { showHistory = true; showSettings = false }, icon = { Icon(Icons.Default.History, null) }, label = { Text("آخر ظهور") })
-                    NavigationBarItem(showSettings, { showSettings = true; showHistory = false }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("معلومات") })
+                    NavigationBarItem(showSettings, { showSettings = true; showHistory = false }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("الإعدادات") })
                 }
             }
         ) { padding ->
@@ -264,6 +281,54 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                 Modifier.fillMaxSize().padding(padding).statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (showSettings) {
+                    Text("إعدادات التطبيق", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+                    Text("تحكم في اتصال Bluetooth وأذونات النظام اللازمة للعثور على السماعات.", color = muted, fontSize = 13.sp)
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = scheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Bluetooth, null, tint = scheme.primary)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Bluetooth", fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
+                                    Text(if (finder.isBluetoothEnabled()) "مفعّل" else "غير مفعّل", color = muted, fontSize = 12.sp)
+                                }
+                                TextButton(onClick = { context.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS)) }) { Text("إعدادات") }
+                            }
+                            HorizontalDivider(color = scheme.surfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Radar, null, tint = scheme.primary)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("الأجهزة القريبة", fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
+                                    Text(if (finder.hasPermissions()) "الإذن ممنوح" else "الإذن مطلوب للبحث", color = muted, fontSize = 12.sp)
+                                }
+                                Text(if (finder.hasPermissions()) "مسموح" else "غير مسموح", color = if (finder.hasPermissions()) scheme.primary else scheme.error, fontSize = 12.sp)
+                            }
+                            Button(onClick = { permissionLauncher.launch(bluetoothPermissions) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("طلب إذن الأجهزة القريبة")
+                            }
+                            HorizontalDivider(color = scheme.surfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.LocationOn, null, tint = scheme.primary)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("الموقع", fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
+                                    Text(if (finder.hasLocationPermission()) "مسموح — يمكن حفظ آخر موقع" else "اختياري لحفظ آخر موقع شوهدت فيه السماعة", color = muted, fontSize = 12.sp)
+                                }
+                            }
+                            OutlinedButton(onClick = {
+                                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                            }, modifier = Modifier.fillMaxWidth()) { Text("منح إذن الموقع") }
+                            Text("إذن الموقع ليس شرطاً للبحث عبر Bluetooth على Android 12 وما بعده. إذا لم تمنحه، سيظل البحث متاحاً لكن لن تُحفظ إحداثيات آخر ظهور.", color = muted, fontSize = 12.sp)
+                            HorizontalDivider(color = scheme.surfaceVariant)
+                            OutlinedButton(onClick = {
+                                context.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                            }, modifier = Modifier.fillMaxWidth()) { Text("فتح إعدادات التطبيق في النظام") }
+                        }
+                    }
+                    Text(finder.status, color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
+                } else {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     FindMyBudsLogoMark(size = 54.dp)
                     Spacer(Modifier.width(12.dp))
@@ -299,7 +364,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         Spacer(Modifier.height(22.dp))
                         Button(onClick = {
                             if (finder.hasPermissions()) { if (finder.scanning) finder.stop() else finder.start() }
-                            else permissionLauncher.launch(permissions.toTypedArray())
+                            else permissionLauncher.launch(bluetoothPermissions)
                         }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp)) {
                             Icon(Icons.Default.BluetoothSearching, null)
                             Spacer(Modifier.width(9.dp))
@@ -375,16 +440,9 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         }
                     }
                 }
-                if (showSettings) {
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("حول التطبيق", fontWeight = FontWeight.Bold, color = scheme.onSurface)
-                            Text("يستخدم التطبيق Bluetooth LE لعرض قوة الإشارة التقريبية. التنبيه الصوتي يصدر من الهاتف. حفظ آخر موقع يتطلب إذن الموقع.", color = muted, fontSize = 13.sp)
-                        }
-                    }
-                }
                 Text(finder.status, color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
+                }
             }
         }
     }
