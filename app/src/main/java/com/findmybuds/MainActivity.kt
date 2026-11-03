@@ -24,6 +24,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -49,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -343,119 +345,181 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                     }
                     Text(if (permissionRefreshVersion >= 0) finder.status else "", color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
                 } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    FindMyBudsLogoMark(size = 54.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("FIND MY BUDS", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp, color = scheme.onBackground)
-                        Text("اعثر على سماعاتك بسهولة", fontSize = 12.sp, color = muted)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Surface(shape = CircleShape, color = if (finder.scanning) scheme.primaryContainer else scheme.surfaceVariant) {
-                        Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(7.dp).background(if (finder.scanning) scheme.primary else muted, CircleShape))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (finder.scanning) "يبحث الآن" else "جاهز", fontSize = 11.sp, color = scheme.onSurface)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FindMyBudsLogoMark(size = 52.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("FIND MY BUDS", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, color = scheme.onBackground)
+                            Text("رفيقك للعثور على سماعاتك", fontSize = 12.sp, color = muted)
                         }
-                    }
-                }
-
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(32.dp), colors = CardDefaults.cardColors(containerColor = scheme.surface), elevation = CardDefaults.cardElevation(1.dp)) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(selected?.name ?: "Mibro Earbuds 2", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
-                        Spacer(Modifier.height(5.dp))
-                        Text(if (selected != null) finder.signalLabel(selected.rssi) else "ضع السماعات بالقرب من الهاتف وابدأ البحث", fontSize = 13.sp, color = muted)
-                        Spacer(Modifier.height(22.dp))
-                        Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(progress = { selected?.let { finder.signalPercent(it.rssi) } ?: 0.035f }, modifier = Modifier.fillMaxSize(), strokeWidth = 10.dp, color = scheme.primary, trackColor = scheme.surfaceVariant)
-                            Surface(shape = CircleShape, color = scheme.secondaryContainer, modifier = Modifier.size(150.dp)) {
-                                Box(contentAlignment = Alignment.Center) { FindMyBudsLogoMark(size = 92.dp) }
-                            }
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Text(selected?.let { "${it.rssi} dBm" } ?: "بانتظار إشارة Bluetooth", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
-                        Text("قوة الإشارة تقديرية وتتأثر بالجدران والاتجاه", fontSize = 11.sp, color = muted)
-                        Spacer(Modifier.height(22.dp))
-                        Button(onClick = {
-                            if (finder.hasPermissions()) { if (finder.scanning) finder.stop() else finder.start() }
-                            else permissionLauncher.launch(bluetoothPermissions)
-                        }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp)) {
-                            Icon(Icons.Default.BluetoothSearching, null)
-                            Spacer(Modifier.width(9.dp))
-                            Text(if (finder.scanning) "إيقاف البحث" else "ابدأ العثور على السماعة", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = { finder.alertPhone() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(20.dp)) {
-                            Icon(Icons.Default.VolumeUp, null)
-                            Spacer(Modifier.width(9.dp))
-                            Text("تشغيل تنبيه الهاتف")
-                        }
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("الأجهزة القريبة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = scheme.onBackground)
-                    Spacer(Modifier.weight(1f))
-                    Text("${finder.devices.size} جهاز", color = muted, fontSize = 12.sp)
-                }
-                if (finder.devices.isEmpty()) {
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = scheme.surfaceVariant)) {
-                        Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Radar, null, tint = scheme.primary, modifier = Modifier.size(30.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text("لم نعثر على أجهزة بعد", fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
-                                Text("ستظهر السماعات والأجهزة القريبة هنا", color = muted, fontSize = 12.sp)
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (finder.scanning) scheme.primaryContainer else scheme.surfaceVariant
+                        ) {
+                            Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(7.dp).background(if (finder.scanning) Color(0xFF20A66A) else muted, CircleShape))
+                                Spacer(Modifier.width(7.dp))
+                                Text(if (finder.scanning) "بحث مباشر" else "متوقف", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
                             }
                         }
                     }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        finder.devices.values.sortedByDescending { it.rssi }.take(5).forEach { bud ->
-                            Card(onClick = { finder.select(bud.address) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (finder.selectedAddress == bud.address) scheme.primaryContainer else scheme.surface)) {
-                                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Headphones, null, tint = scheme.primary)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(bud.name, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
-                                        Text(bud.address, color = muted, fontSize = 10.sp)
+
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Brush.linearGradient(listOf(scheme.primaryContainer, scheme.secondaryContainer, scheme.tertiaryContainer)))
+                            .padding(22.dp)
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("العثور على سماعاتك", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = scheme.onPrimaryContainer)
+                                    Text("قرّب الهاتف لتحديد اتجاه الإشارة", fontSize = 12.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.75f))
+                                }
+                                Surface(shape = RoundedCornerShape(14.dp), color = scheme.surface.copy(alpha = 0.65f)) {
+                                    Icon(Icons.Default.Headphones, null, tint = scheme.primary, modifier = Modifier.padding(10.dp).size(23.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(24.dp))
+                            Text(selected?.name ?: "Mibro Earbuds 2", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = scheme.onPrimaryContainer)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                selected?.let { finder.signalLabel(it.rssi) } ?: "بانتظار اكتشاف السماعة",
+                                fontSize = 12.sp,
+                                color = scheme.onPrimaryContainer.copy(alpha = 0.75f)
+                            )
+                            Spacer(Modifier.height(18.dp))
+                            Box(Modifier.size(204.dp), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(204.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.12f), CircleShape))
+                                Box(Modifier.size(166.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.18f), CircleShape))
+                                Box(Modifier.size(128.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.22f), CircleShape))
+                                CircularProgressIndicator(
+                                    progress = { selected?.let { finder.signalPercent(it.rssi) } ?: 0.025f },
+                                    modifier = Modifier.size(204.dp),
+                                    strokeWidth = 5.dp,
+                                    color = scheme.primary,
+                                    trackColor = Color.Transparent
+                                )
+                                Surface(shape = CircleShape, color = scheme.surface.copy(alpha = 0.92f), modifier = Modifier.size(104.dp), shadowElevation = 5.dp) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        FindMyBudsLogoMark(size = 82.dp)
                                     }
-                                    Text("${bud.rssi} dBm", color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                selected?.let { "${it.rssi} dBm" } ?: "— dBm",
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = scheme.onPrimaryContainer
+                            )
+                            Text("مؤشر قوة الإشارة", fontSize = 11.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.72f))
+                            Spacer(Modifier.height(22.dp))
+                            Button(
+                                onClick = {
+                                    if (finder.hasPermissions()) {
+                                        if (finder.scanning) finder.stop() else finder.start()
+                                    } else permissionLauncher.launch(bluetoothPermissions)
+                                },
+                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = scheme.primary, contentColor = scheme.onPrimary)
+                            ) {
+                                Icon(if (finder.scanning) Icons.Default.Bluetooth else Icons.Default.BluetoothSearching, null)
+                                Spacer(Modifier.width(9.dp))
+                                Text(if (finder.scanning) "إيقاف البحث" else "ابدأ البحث الآن", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            TextButton(onClick = { finder.alertPhone() }) {
+                                Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(18.dp), tint = scheme.onPrimaryContainer)
+                                Spacer(Modifier.width(7.dp))
+                                Text("تشغيل نغمة على الهاتف", color = scheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("الأجهزة القريبة", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+                            Text("اختر السماعة لمتابعة قوة إشارتها", fontSize = 11.sp, color = muted)
+                        }
+                        Surface(shape = RoundedCornerShape(12.dp), color = scheme.secondaryContainer) {
+                            Text("${finder.devices.size} أجهزة", modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp), fontSize = 11.sp, color = scheme.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    if (finder.devices.isEmpty()) {
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = scheme.surface)
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = RoundedCornerShape(17.dp), color = scheme.secondaryContainer) {
+                                    Icon(Icons.Default.Radar, null, tint = scheme.onSecondaryContainer, modifier = Modifier.padding(13.dp).size(28.dp))
+                                }
+                                Spacer(Modifier.width(14.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("المسح جاهز", fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                                    Text("ابدأ البحث لتظهر أجهزة Bluetooth القريبة هنا.", color = muted, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            finder.devices.values.sortedByDescending { it.rssi }.take(6).forEach { bud ->
+                                val isSelected = finder.selectedAddress == bud.address
+                                Card(
+                                    onClick = { finder.select(bud.address) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = CardDefaults.cardColors(containerColor = if (isSelected) scheme.primaryContainer else scheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 0.dp)
+                                ) {
+                                    Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(shape = RoundedCornerShape(15.dp), color = if (isSelected) scheme.surface.copy(alpha = 0.75f) else scheme.secondaryContainer) {
+                                            Icon(Icons.Default.Headphones, null, tint = scheme.primary, modifier = Modifier.padding(11.dp).size(24.dp))
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(bud.name, fontWeight = FontWeight.SemiBold, color = scheme.onSurface, fontSize = 14.sp)
+                                            Text(if (isSelected) "السماعة المحددة" else "اضغط لتحديد هذا الجهاز", color = muted, fontSize = 10.sp)
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("${bud.rssi} dBm", fontWeight = FontWeight.Bold, color = scheme.primary, fontSize = 13.sp)
+                                            Text(finder.signalLabel(bud.rssi), color = muted, fontSize = 10.sp)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = scheme.surface)) {
-                    Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, null, tint = scheme.primary)
-                            Spacer(Modifier.width(10.dp))
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = scheme.surface)
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(shape = RoundedCornerShape(15.dp), color = scheme.secondaryContainer) {
+                                Icon(Icons.Default.LocationOn, null, tint = scheme.onSecondaryContainer, modifier = Modifier.padding(11.dp).size(23.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("آخر مكان شوهدت فيه", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = scheme.onSurface)
+                                Text("آخر مكان شوهدت فيه", fontWeight = FontWeight.Bold, color = scheme.onSurface, fontSize = 13.sp)
+                                Spacer(Modifier.height(3.dp))
                                 Text(finder.lastLocationText, color = muted, fontSize = 11.sp)
                             }
-                        }
-                        HorizontalDivider(color = scheme.surfaceVariant)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.VolumeUp, null, tint = scheme.primary)
-                            Spacer(Modifier.width(10.dp))
-                            Text("التنبيه الصوتي يصدر من الهاتف", color = muted, fontSize = 11.sp)
+                            Icon(Icons.Default.History, null, tint = muted)
                         }
                     }
-                }
-                if (showHistory) {
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
-                        Column(Modifier.padding(18.dp)) {
-                            Text("آخر رصد محفوظ", fontWeight = FontWeight.Bold, color = scheme.onSurface)
-                            Spacer(Modifier.height(8.dp))
-                            Text(finder.lastLocationText, color = muted)
-                        }
-                    }
-                }
-                Text(finder.status, color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
+                    Text("قوة الإشارة تقديرية وتتأثر بالجدران والمسافة واتجاه السماعة.", color = muted, fontSize = 10.sp)
+                    Text(finder.status, color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
                 }
             }
         }
