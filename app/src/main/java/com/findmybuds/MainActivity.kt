@@ -109,6 +109,7 @@ class BluetoothFinder(private val context: Context) {
     fun isBluetoothEnabled(): Boolean = try { adapter?.isEnabled == true } catch (_: SecurityException) { false }
 
     fun start() {
+        if (scanning) return
         if (!hasPermissions()) {
             status = "امنح إذن الأجهزة القريبة لبدء البحث"
             return
@@ -169,23 +170,30 @@ class BluetoothFinder(private val context: Context) {
     }
 
     fun alertPhone() {
-        try {
-            val tone = ToneGenerator(AudioManager.STREAM_ALARM, 85)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 900)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000L)
-        } catch (_: Exception) { status = "تعذر تشغيل التنبيه الصوتي" }
+        playPhoneTone(85, 900)
     }
 
     private fun maybeBeep(rssi: Int) {
         val close = rssi >= -62
         val now = SystemClock.elapsedRealtime()
         if (close && (!lastCloseState || now - lastBeepAt > 3500)) {
-            try {
-                ToneGenerator(AudioManager.STREAM_ALARM, 75).startTone(ToneGenerator.TONE_PROP_BEEP, 450)
-            } catch (_: Exception) {}
+            playPhoneTone(75, 450)
             lastBeepAt = now
         }
         lastCloseState = close
+    }
+
+    private fun playPhoneTone(volume: Int, durationMs: Int) {
+        try {
+            val tone = ToneGenerator(AudioManager.STREAM_ALARM, volume)
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                { try { tone.release() } catch (_: Exception) {} },
+                durationMs + 120L
+            )
+        } catch (_: Exception) {
+            status = "تعذر تشغيل التنبيه الصوتي"
+        }
     }
 
     private fun saveLastLocation() {
@@ -344,6 +352,44 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         }
                     }
                     Text(if (permissionRefreshVersion >= 0) finder.status else "", color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
+                } else if (showHistory) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        FindMyBudsLogoMark(size = 48.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("آخر ظهور", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+                            Text("تفاصيل آخر رصد محفوظ للسماعة المحددة", fontSize = 12.sp, color = muted)
+                        }
+                    }
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = scheme.surface)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Surface(shape = RoundedCornerShape(18.dp), color = scheme.secondaryContainer) {
+                                Icon(Icons.Default.History, null, tint = scheme.onSecondaryContainer, modifier = Modifier.padding(15.dp).size(30.dp))
+                            }
+                            Text("آخر مكان شوهدت فيه", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                            Text(finder.lastLocationText, fontSize = 14.sp, color = scheme.onSurfaceVariant)
+                            HorizontalDivider(color = scheme.surfaceVariant)
+                            Text(
+                                "يُسجّل هذا المكان من موقع الهاتف وقت رصد السماعة عبر Bluetooth، وليس موقعًا مباشرًا أو GPS مدمجًا في السماعة.",
+                                fontSize = 12.sp,
+                                color = scheme.onSurfaceVariant
+                            )
+                            Button(
+                                onClick = { showHistory = false },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(17.dp)
+                            ) {
+                                Icon(Icons.Default.Search, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("العودة إلى البحث")
+                            }
+                        }
+                    }
+                    Text("للحصول على سجل أحدث، اختر السماعة وابدأ البحث عندما تكون بالقرب منها.", color = muted, fontSize = 12.sp)
                 } else {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -353,7 +399,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text("FIND MY BUDS", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, color = scheme.onBackground)
-                            Text("رفيقك للعثور على سماعاتك", fontSize = 12.sp, color = muted)
+                            Text("رفيقك للعثور على سماعاتك · v${BuildConfig.VERSION_NAME}", fontSize = 11.sp, color = muted)
                         }
                         Surface(
                             shape = RoundedCornerShape(50),
