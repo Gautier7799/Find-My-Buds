@@ -23,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -51,6 +52,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -247,15 +250,71 @@ fun FindMyBudsLogoMark(modifier: Modifier = Modifier, size: androidx.compose.ui.
             contentAlignment = Alignment.Center
         ) {
             Box(
-                Modifier.size(size * 0.48f).clip(CircleShape).background(Color(0xFF111111)),
+                Modifier.size(size * 0.42f).clip(CircleShape).background(Color(0xFF111111)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Bluetooth,
                     contentDescription = "Find My Buds",
                     tint = Color(0xFF0082FF),
-                    modifier = Modifier.size(size * 0.34f)
+                    modifier = Modifier.size(size * 0.20f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignalGauge(
+    rssi: Int?,
+    progress: Float,
+    accent: Color,
+    track: Color,
+    contentColor: Color
+) {
+    Box(Modifier.size(208.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+            val maxRadius = size.minDimension / 2f - 7.dp.toPx()
+            listOf(0.58f, 0.78f, 1f).forEach { factor ->
+                drawCircle(
+                    color = track.copy(alpha = if (factor == 1f) 0.65f else 0.38f),
+                    radius = maxRadius * factor,
+                    center = center,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
+            drawArc(
+                color = accent,
+                startAngle = -90f,
+                sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(center.x - maxRadius, center.y - maxRadius),
+                size = androidx.compose.ui.geometry.Size(maxRadius * 2f, maxRadius * 2f),
+                style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+        Surface(
+            shape = CircleShape,
+            color = track.copy(alpha = 0.72f),
+            modifier = Modifier.size(124.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, contentColor.copy(alpha = 0.10f))
+        ) {
+            Column(
+                Modifier.fillMaxSize().padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    rssi?.toString() ?: "—",
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor
+                )
+                Text("dBm", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = contentColor.copy(alpha = 0.68f))
+                Spacer(Modifier.height(5.dp))
+                Text("قوة الإشارة", fontSize = 10.sp, color = contentColor.copy(alpha = 0.72f))
             }
         }
     }
@@ -441,31 +500,19 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                                 color = scheme.onPrimaryContainer.copy(alpha = 0.75f)
                             )
                             Spacer(Modifier.height(18.dp))
-                            Box(Modifier.size(204.dp), contentAlignment = Alignment.Center) {
-                                Box(Modifier.size(204.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.12f), CircleShape))
-                                Box(Modifier.size(166.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.18f), CircleShape))
-                                Box(Modifier.size(128.dp).border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.22f), CircleShape))
-                                CircularProgressIndicator(
-                                    progress = { selected?.let { finder.signalPercent(it.rssi) } ?: 0.025f },
-                                    modifier = Modifier.size(204.dp),
-                                    strokeWidth = 5.dp,
-                                    color = scheme.primary,
-                                    trackColor = Color.Transparent
-                                )
-                                Surface(shape = CircleShape, color = scheme.surface.copy(alpha = 0.92f), modifier = Modifier.size(104.dp), shadowElevation = 5.dp) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        FindMyBudsLogoMark(size = 82.dp)
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                selected?.let { "${it.rssi} dBm" } ?: "— dBm",
-                                fontSize = 25.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = scheme.onPrimaryContainer
+                            SignalGauge(
+                                rssi = selected?.rssi,
+                                progress = selected?.let { finder.signalPercent(it.rssi) } ?: 0f,
+                                accent = scheme.primary,
+                                track = scheme.surface.copy(alpha = 0.58f),
+                                contentColor = scheme.onPrimaryContainer
                             )
-                            Text("مؤشر قوة الإشارة", fontSize = 11.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.72f))
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                if (selected == null) "اختر السماعة من الأجهزة المكتشفة" else "تتغير القراءة مباشرة مع اقترابك وابتعادك",
+                                fontSize = 11.sp,
+                                color = scheme.onPrimaryContainer.copy(alpha = 0.72f)
+                            )
                             Spacer(Modifier.height(22.dp))
                             Button(
                                 onClick = {
