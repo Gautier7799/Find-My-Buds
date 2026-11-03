@@ -93,8 +93,7 @@ class BluetoothFinder(private val context: Context) {
         val scan = if (Build.VERSION.SDK_INT >= 31) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
         } else {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
         val connect = Build.VERSION.SDK_INT < 31 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
@@ -257,6 +256,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
     LaunchedEffect(Unit) { finder.loadSavedLocation() }
     val selected = finder.devices[finder.selectedAddress]
     val context = LocalContext.current
+    val permissionRefreshVersion = permissionRefresh
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicLightColorScheme(context) else lightColorScheme(
@@ -327,7 +327,7 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                             }, modifier = Modifier.fillMaxWidth()) { Text("فتح إعدادات التطبيق في النظام") }
                         }
                     }
-                    Text(finder.status, color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
+                    Text(if (permissionRefreshVersion >= 0) finder.status else "", color = muted, fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
                 } else {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     FindMyBudsLogoMark(size = 54.dp)
