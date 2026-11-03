@@ -43,4 +43,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Find-My-Buds-v0.2.${{ github.run_number }}-build-${{ github.run_number }}
-          path: app/build/outputs/apk/debug/Find-My-Buds-v0.1.${{ github.run_number }}-build-${{ github.run_number }}.apk
+          path: app/build/outputs/apk/debug/Find-My-Buds-v0.2.${{ github.run_number }}-build-${{ github.run_number }}.apk
