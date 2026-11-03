@@ -34,8 +34,13 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Upload debug APK
+      - name: Name APK with version
+        run: |
+          VERSION="0.1.${GITHUB_RUN_NUMBER}"
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/Find-My-Buds-v${VERSION}-build-${GITHUB_RUN_NUMBER}.apk"
+
+      - name: Upload versioned debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Find-My-Buds-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Find-My-Buds-v0.1.${{ github.run_number }}-build-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/Find-My-Buds-v0.1.${{ github.run_number }}-build-${{ github.run_number }}.apk
