@@ -44,8 +44,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
@@ -342,11 +344,22 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
     val permissionRefreshVersion = permissionRefresh
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicLightColorScheme(context) else lightColorScheme(
-        primary = Color(0xFF526B9A), onPrimary = Color.White,
-        background = Color(0xFFF7F7FC), surface = Color.White,
-        surfaceVariant = Color(0xFFE9EAF2)
-    )
+    val isDark = isSystemInDarkTheme()
+    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (isDark) {
+        darkColorScheme(
+            primary = Color(0xFFB5C8F2), onPrimary = Color(0xFF172A4D),
+            background = Color(0xFF111318), surface = Color(0xFF1A1D24),
+            surfaceVariant = Color(0xFF30343D)
+        )
+    } else {
+        lightColorScheme(
+            primary = Color(0xFF526B9A), onPrimary = Color.White,
+            background = Color(0xFFF7F7FC), surface = Color.White,
+            surfaceVariant = Color(0xFFE9EAF2)
+        )
+    }
     val muted = scheme.onSurfaceVariant
 
     MaterialTheme(colorScheme = scheme) {
@@ -476,7 +489,8 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         Modifier.fillMaxWidth()
                             .clip(RoundedCornerShape(32.dp))
                             .background(Brush.linearGradient(listOf(scheme.primaryContainer, scheme.secondaryContainer, scheme.tertiaryContainer)))
-                            .padding(22.dp)
+                            .border(1.dp, scheme.onPrimaryContainer.copy(alpha = 0.10f), RoundedCornerShape(32.dp))
+                            .padding(24.dp)
                     ) {
                         Column(
                             Modifier.fillMaxWidth(),
@@ -484,8 +498,10 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
                         ) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("العثور على سماعاتك", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = scheme.onPrimaryContainer)
-                                    Text("قرّب الهاتف لتحديد اتجاه الإشارة", fontSize = 12.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.75f))
+                                    Text("وضع العثور", fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.66f))
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("العثور على سماعاتك", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = scheme.onPrimaryContainer)
+                                    Text("تابع قوة الإشارة لحظة بلحظة", fontSize = 12.sp, color = scheme.onPrimaryContainer.copy(alpha = 0.76f))
                                 }
                                 Surface(shape = RoundedCornerShape(14.dp), color = scheme.surface.copy(alpha = 0.65f)) {
                                     Icon(Icons.Default.Headphones, null, tint = scheme.primary, modifier = Modifier.padding(10.dp).size(23.dp))
