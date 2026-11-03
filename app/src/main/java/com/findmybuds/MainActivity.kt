@@ -63,6 +63,7 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 data class Bud(val address: String, val name: String, val rssi: Int, val seenAt: Long)
 
@@ -87,7 +88,11 @@ class BluetoothFinder(private val context: Context) {
     private var scanner: BluetoothLeScanner? = null
     private var callback: ScanCallback? = null
     private var lastBeepAt = 0L
-    private var lastCloseState = false
+    private var lastAlertBand = -1
+    private var scanRetries = 0
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val rssiSamples = mutableMapOf<String, ArrayDeque<Int>>()
+    private val smoothedRssi = mutableMapOf<String, Float>()
 
     val devices = mutableStateMapOf<String, Bud>()
     var scanning by mutableStateOf(false)
@@ -126,38 +131,77 @@ class BluetoothFinder(private val context: Context) {
         }
         try {
             scanner = bt.bluetoothLeScanner
-            if (scanner == null) {
+            val activeScanner = scanner
+            if (activeScanner == null) {
                 status = "ماسح Bluetooth LE غير متاح"
                 return
             }
             val cb = object : ScanCallback() {
-                override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    val device = result.device
-                    val address = device.address ?: return
-                    val name = try { device.name ?: result.scanRecord?.deviceName ?: "جهاز Bluetooth غير مسمى" }
-                               catch (_: SecurityException) { "سماعة Bluetooth" }
-                    devices[address] = Bud(address, name, result.rssi, System.currentTimeMillis())
-                    if (selectedAddress == address) {
-                        saveLastLocation()
-                        maybeBeep(result.rssi)
-                    }
+                override fun onScanResult(callbackType: Int, result: ScanResult) = handleResult(result)
+                override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                    results.forEach { handleResult(it) }
                 }
                 override fun onScanFailed(errorCode: Int) {
                     scanning = false
-                    status = "فشل البحث (رمز $errorCode)"
+                    if (scanRetries < 2 && errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
+                        scanRetries++
+                        status = "تعثر البحث؛ إعادة المحاولة ${scanRetries}/2"
+                        mainHandler.postDelayed({ if (!scanning) start() }, 1800L)
+                    } else {
+                        status = "فشل البحث (رمز $errorCode)"
+                    }
                 }
             }
             callback = cb
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setReportDelay(0L)
                 .build()
-            scanner?.startScan(null, settings, cb)
+            activeScanner.startScan(null, settings, cb)
             scanning = true
             status = "يتم البحث عن سماعات Bluetooth القريبة"
         } catch (e: SecurityException) {
+            scanning = false
             status = "لم تُمنح صلاحية البحث عن الأجهزة القريبة"
         } catch (e: Exception) {
+            scanning = false
             status = "تعذر بدء البحث: ${e.message ?: "خطأ غير معروف"}"
+        }
+    }
+
+    private fun handleResult(result: ScanResult) {
+        val address = try { result.device.address } catch (_: SecurityException) { return }
+        if (address.isNullOrBlank()) return
+        val name = try { result.device.name ?: result.scanRecord?.deviceName ?: "جهاز Bluetooth غير مسمى" }
+                   catch (_: SecurityException) { "سماعة Bluetooth" }
+        val now = System.currentTimeMillis()
+        val samples = rssiSamples.getOrPut(address) { ArrayDeque() }
+        samples.addLast(result.rssi)
+        while (samples.size > 5) samples.removeFirst()
+        val median = samples.toList().sorted()[samples.size / 2].toFloat()
+        val previous = smoothedRssi[address]
+        val filtered = if (previous == null) median else (previous * 0.62f + median * 0.38f)
+        smoothedRssi[address] = filtered
+        val stableRssi = filtered.toInt()
+        devices[address] = Bud(address, name, stableRssi, now)
+        scanRetries = 0
+        if (selectedAddress == address) {
+            saveLastLocation()
+            maybeBeep(stableRssi)
+        }
+    }
+
+    fun pruneStaleDevices() {
+        val cutoff = System.currentTimeMillis() - 7500L
+        val stale = devices.values.filter { it.seenAt < cutoff }.map { it.address }
+        stale.forEach { address ->
+            devices.remove(address)
+            rssiSamples.remove(address)
+            smoothedRssi.remove(address)
+        }
+        if (selectedAddress != null && selectedAddress !in devices.keys) {
+            lastAlertBand = -1
+            status = "انقطعت إشارة السماعة؛ نواصل البحث عنها"
         }
     }
 
@@ -170,6 +214,7 @@ class BluetoothFinder(private val context: Context) {
 
     fun select(address: String) {
         selectedAddress = address
+        lastAlertBand = -1
         status = "تم اختيار السماعة. اضغط ابدأ البحث لتتبع الإشارة"
         devices[address]?.let { saveLastLocation() }
     }
@@ -179,20 +224,39 @@ class BluetoothFinder(private val context: Context) {
     }
 
     private fun maybeBeep(rssi: Int) {
-        val close = rssi >= -62
+        val band = when {
+            rssi >= -55 -> 3
+            rssi >= -67 -> 2
+            rssi >= -80 -> 1
+            else -> 0
+        }
+        if (band == 0) {
+            lastAlertBand = 0
+            return
+        }
         val now = SystemClock.elapsedRealtime()
-        if (close && (!lastCloseState || now - lastBeepAt > 3500)) {
-            playPhoneTone(75, 450)
+        val interval = when (band) {
+            3 -> 850L
+            2 -> 1350L
+            else -> 2100L
+        }
+        if (band != lastAlertBand || now - lastBeepAt >= interval) {
+            val volume = when (band) {
+                3 -> 82
+                2 -> 68
+                else -> 52
+            }
+            playPhoneTone(volume, if (band == 3) 300 else 220)
             lastBeepAt = now
         }
-        lastCloseState = close
+        lastAlertBand = band
     }
 
     private fun playPhoneTone(volume: Int, durationMs: Int) {
         try {
             val tone = ToneGenerator(AudioManager.STREAM_ALARM, volume)
             tone.startTone(ToneGenerator.TONE_PROP_BEEP, durationMs)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+            mainHandler.postDelayed(
                 { try { tone.release() } catch (_: Exception) {} },
                 durationMs + 120L
             )
@@ -240,7 +304,6 @@ class BluetoothFinder(private val context: Context) {
 
     fun signalPercent(rssi: Int): Float = ((rssi + 100) / 60f).coerceIn(0f, 1f)
 }
-
 @Composable
 fun FindMyBudsLogoMark(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 56.dp) {
     Box(
@@ -338,7 +401,13 @@ fun FindMyBudsScreen(finder: BluetoothFinder) {
         permissionRefresh++
         if (finder.hasLocationPermission()) finder.status = "تم منح إذن الموقع لحفظ آخر مكان رُصدت فيه السماعة"
     }
-    LaunchedEffect(Unit) { finder.loadSavedLocation() }
+    LaunchedEffect(Unit) {
+        finder.loadSavedLocation()
+        while (true) {
+            delay(1000L)
+            finder.pruneStaleDevices()
+        }
+    }
     val selected = finder.devices[finder.selectedAddress]
     val context = LocalContext.current
     val permissionRefreshVersion = permissionRefresh
